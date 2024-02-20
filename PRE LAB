@@ -1,0 +1,142 @@
+;******************************************************************************
+;Universidad del Valle de Guatemala
+;IE2023: Programacion de Microcontroladores 
+;Antirebote.asm
+;Autor; Joao Santos
+;Proyecto; PRELAB 2
+;Hardware: Atemega328P
+;Creado: 29/01/2024
+;Ultima modificacion: 05/02/2024
+;******************************************************************************
+
+
+;******************************************************************************
+;Encabezado
+;******************************************************************************
+.include "M328PDEF.inc"
+.cseg
+
+.org 0x00
+
+;******************************************************************************
+;Stack
+;******************************************************************************
+LDI R16, LOW(RAMEND)
+OUT SPL, R16
+LDI R21, HIGH(RAMEND)
+OUT SPH, R17
+
+;******************************************************************************
+; Configuracion
+;******************************************************************************
+Setup:
+	LDI R16, 0b1000_0000
+	LDI R21, 0b0000_0000
+	STS CLKPR, R16  
+	LDI R16, 0b0000_0011 
+	STS CLKPR, R16   
+
+	CALL INIT_T0
+	CBI DDRC, PC1		;PC1 como entrada
+	SBI PORTC, PC1		;pullup
+
+	CBI DDRC, PC2 
+	SBI PORTC, PC2	
+
+;******************************************************************************
+;Contador
+;******************************************************************************
+	SBI DDRD, PD5
+	SBI DDRD, PD4
+	SBI DDRD, PD3
+	SBI DDRD, PD2 
+
+;******************************************************************************
+
+LOOP:
+
+
+;Contador
+	IN	R17, PINC	
+	SBRS R17, PC1	//comprobar estado de PC1 apagado
+	RJMP DELAY
+	//SBRS R17, PC2	//comprobar estado de PC2 encendido	
+	//RJMP DECREMENTO1
+
+RJMP COMPARADORES
+
+DELAY:
+	LDI R16, 100
+	DelayInc:
+		DEC	R16
+		BRNE DelayInc
+
+	SBIS PINC, PC1
+	RJMP DELAY
+	RJMP LOOP
+
+INCREMENTO1:
+IN R17, PINC
+SBRS R17, PC1
+RJMP INCREMENTO1
+CPI	R21, 0x0F
+BREQ LOOP
+INC R21
+RJMP LOOP
+
+
+TIMER:
+IN R16, TIFR0
+CPI R16, (1 << TOV0)
+BRNE LOOP
+
+LDI R16, 100
+OUT TCNT0, R16
+
+SBI TIFR0, TOV0
+
+INC R20
+CPI R20, 10
+BRNE LOOP
+
+CLR R20
+
+RJMP INCLREMENTO
+
+
+COMPARADORES:
+;******************************************************************************
+;comparador, activador y desactivador de leds 
+;******************************************************************************
+	SBRC R21, 0		; BIT 0 de R21 EN 1
+	SBI PORTD, 2	; LED EN PUERTO D2
+	SBRC R21, 1		; BIT 1
+	SBI PORTD, 3	; PUERTO D3
+	SBRC R21, 2		; BIT 2
+	SBI PORTD, 4	; PUERTO D4
+	SBRC R21, 3		; BIT 3
+	SBI PORTD, 5	; PUERTO D5
+
+	SBRS R21, 0
+	CBI PORTD, 2
+	SBRS R21, 1		; BIT 1
+	CBI PORTD, 3	; PUERTO D3
+	SBRS R21, 2		; BIT 2
+	CBI PORTD, 4	; PUERTO D4
+	SBRS R21, 3		; BIT 3
+	CBI PORTD, 5	; PUERTO D5
+
+	RJMP LOOP
+
+;******************************************************************************
+
+
+INIT_T0:
+
+LDI R16, (1 << CS02) | (1 << CS00)
+OUT TCCR0B, R16
+
+LDI R16, 100
+OUT TCNT0, R16
+
+RET

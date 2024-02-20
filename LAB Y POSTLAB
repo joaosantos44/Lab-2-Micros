@@ -1,0 +1,172 @@
+;******************************************************************************
+;Universidad del Valle de Guatemala
+;IE2023: Programacion de Microcontroladores 
+;Antirebote.asm
+;Autor; Joao Santos
+;Proyecto; LAB 2
+;Hardware: Atemega328P
+;Creado: 06/02/2024
+;Ultima modificacion: 12/02/2024
+;******************************************************************************
+
+;******************************************************************************
+;ENCABEZADO
+;******************************************************************************
+.INCLUDE "M328PDEF.INC"
+.CSEG
+
+.ORG 0x00
+
+;******************************************************************************
+;STACK POINTER
+;******************************************************************************
+	LDI R16, LOW(RAMEND)
+	OUT SPL, R16
+	LDI R17, HIGH(RAMEND)
+	OUT SPH, R17
+
+;******************************************************************************
+;VALORES DEL DISPLAY
+;******************************************************************************
+
+TABLAVALORES: .DB 0x40, 0xF2, 0x24, 0x30, 0x60, 0x32, 0x04, 0x78, 0x00, 0x10, 0x08, 0x03, 0x8C, 0x42, 0x0C, 0x1C
+
+;******************************************************************************
+;CONFIGURACION
+;******************************************************************************
+TMERSETUP:
+CALL INIT_T0
+
+SETUP:
+	LDI R16, (1 << CLKPCE)	;prescaler
+	STS CLKPR, R16
+	LDI R16, 0b0000_0100
+	STS CLKPR, R16			;Frecuencia de 1MHz
+	
+	LDI R17, 0xFF
+	MOV R18, R17
+
+	LDI R24, 0x00
+	OUT PORTD, R24
+	STS UCSR0B,R24
+
+	LDI R16, 0b1111_1111 
+	OUT DDRD, R16			;PORTD COMO SALIDAS
+
+	LDI R16, 0b1111_1111 
+	OUT DDRB, R16			;PORTB COMO SALIDAS
+
+	LDI R16, 0b0000_0000	;PORTC COMO ENTRADA
+	OUT DDRC, R16
+	LDI R16, 0b0000_0011
+	OUT PORTC, R16
+
+	LDI ZH, HIGH(TABLAVALORES << 1)
+	LDI ZL, LOW(TABLAVALORES << 1)
+
+;******************************************************************************
+;INICIO
+;******************************************************************************
+TIMER:
+	IN R16, TIFR0
+	CPI R16, (1 << TOV0)
+	BRNE TIMER
+
+	LDI R16, 100
+	OUT TCNT0, R16
+
+	SBI TIFR0, TOV0
+
+	CALL LECTOR
+	CALL PUNTO
+
+	INC R20
+	CPI R20, 10
+	BRNE TIMER
+
+	CLR R20
+
+	CPI R21, 0x0F
+	BREQ COMPCICLO
+	INC R21				;Incrementar el contador
+	OUT PORTB, R21
+	RJMP TIMER
+
+;******************************************************************************
+;SUBRUTINAS
+;******************************************************************************
+LECTOR:
+	MOV R18, R17
+	IN R17, PINC
+	CPSE R18, R17
+	RJMP BOTON
+	JMP TIMER
+
+BOTON:
+	IN R17,PINC
+	MOV R18, R17
+	SBRS R17, PC0
+	RJMP REVOVER
+	SBRS R17, PC1
+	RJMP REVUNDER
+	JMP TIMER
+
+REVOVER:
+	CPI ZL, 23
+	BRNE INCREMENTO 
+	LDI R23, 0x00
+	LDI ZL, 8
+	LPM R22, Z
+	OUT PORTD, R22
+	JMP TIMER
+
+REVUNDER:
+	CPI ZL, 8
+	BRNE DECREMENTO 
+	LDI R23, 0xFF
+	LDI ZL, 23
+	LPM R22, Z
+	OUT PORTD, R22
+	JMP TIMER
+
+INCREMENTO:
+	INC R23
+	LDI R22, 1
+	ADD ZL, R22
+	LPM R22, Z
+	OUT PORTD, R22
+	JMP TIMER
+
+DECREMENTO:
+	DEC R23
+	LDI R22, 1
+	SUB ZL, R22
+	LPM R22, Z
+	OUT PORTD, R22
+	JMP TIMER
+
+PUNTO: 
+	CPSE R21, R23
+	JMP TIMER
+	LDI R21, 0x00
+	OUT PORTD, R21
+	SBI PINB, PD7
+	JMP TIMER
+
+COMPCICLO:
+	LDI R21, 0x00
+	OUT PORTB, R21
+	RJMP TIMER
+
+;******************************************************************************
+;SET DEL TIMER
+;******************************************************************************
+INIT_T0:
+
+LDI R16, (1 << CS02) | (1 << CS00)
+OUT TCCR0B, R16
+
+LDI R16, 100
+OUT TCNT0, R16
+
+JMP Setup
